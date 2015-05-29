@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+import PIL
+from PIL import Image
+from PIL import ImageOps
+
 class Printer(object):
 
     printer_options_double = [14, 27, 14]
@@ -24,8 +28,7 @@ class Printer(object):
         "|____/ \___/ \___/ \__|_| |_|" ]
 
     lp = None
-    Initialized = False
-    
+
     def __init__(self):
         self.lp = open("/dev/usb/lp0", "w")
 
@@ -68,4 +71,39 @@ class Printer(object):
         self.lp.write(bytearray(self.printer_options_double))
         self.lp.write(text + "\n")
         self.lp.write(bytearray(self.printer_options_reset))
+        self.lp.flush()
+
+    def PrintImage(self, image):
+        # Working on the assumption that this is an 80mm printer, which isn't
+        # always certain. Future changes!
+        ratio = 1.0
+        if(img.size[0] > img.size[1]):
+            ratio = float(img.size[1]) / float(img.size[0])
+        elif(img.size[1] > img.size[0]):
+            ratio = float(img.size[0]) / float(img.size[1])
+        new_height = int(576 * ratio)
+
+        img = image.resize((576, new_height), resample=PIL.Image.BILINEAR)
+        img = img.convert("1")
+
+        num_rows = img.size[1]
+        num_rows_high = (num_rows >> 8) & 0xFF
+        num_rows_low = num_rows & 0xFF
+
+        print_image = []
+        px = 0x00
+        pindex = 0
+        for pixel in img.getdata():
+            if (pixel == 0):
+                px += 1
+            if (pindex > 6):
+                print_image.append(px)
+                pindex = 0
+                px = 0x00
+            else:
+                px = px << 1
+                pindex += 1
+
+        self.lp.write(bytearray([27, 83, num_rows_high, num_rows_low]))
+        self.lp.write(bytearray(print_image))
         self.lp.flush()
